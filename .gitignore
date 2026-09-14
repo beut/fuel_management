@@ -1,0 +1,14 @@
+# Android / Kotlin / Gradle build output
+android/**/build/
+android/.gradle/
+android/local.properties
+android/*.iml
+android/.idea/
+android/captures/
+android/.cxx/
+
+# Machine-local Claude Code state (not meant to be shared)
+.claude/scheduled_tasks.lock
+
+# OS cruft
+.DS_Store
