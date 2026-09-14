@@ -24,6 +24,8 @@ sealed interface CaptureStep {
         val suggestedLiters: Double?,
         val suggestedOdometerKm: Long?,
         val suggestedAmountPln: Double?,
+        /** Data tankowania -- rozpoznana z paragonu, albo dzisiejsza, gdy nieczytelna. Zawsze edytowalna. */
+        val date: LocalDate,
         val ocrRawText: String,
         val duplicateWarningLiters: Double? = null,
     ) : CaptureStep
@@ -49,6 +51,8 @@ class CaptureViewModel(
                 result.suggestedLiters,
                 result.suggestedOdometerKm,
                 result.suggestedAmountPln,
+                // Nieczytelna/nierozpoznana data tankowania -> przyjmujemy dzisiejszą, edytowalną.
+                result.suggestedDate ?: LocalDate.now(),
                 result.rawText,
             )
         }
@@ -61,6 +65,7 @@ class CaptureViewModel(
             suggestedLiters = null,
             suggestedOdometerKm = null,
             suggestedAmountPln = null,
+            date = LocalDate.now(),
             ocrRawText = "",
         )
     }
@@ -76,22 +81,22 @@ class CaptureViewModel(
     /**
      * FR-005a: pierwsza próba dla danej wartości sprawdza duplikat i, jeśli wykryty, pokazuje
      * ostrzeżenie zamiast zapisywać; ponowne wywołanie z tą samą wartością (użytkownik nacisnął
-     * "Zapisz" po raz drugi mimo ostrzeżenia) zapisuje wpis. [odometerKm]/[amountPln] są
-     * opcjonalne (użytkownik mógł je usunąć/nie potwierdzić) i nie wpływają na wykrywanie
-     * duplikatu -- to wyłącznie data + litry (data-model.md).
+     * "Zapisz" po raz drugi mimo ostrzeżenia) zapisuje wpis. [date] jest tą, którą użytkownik
+     * faktycznie potwierdził na ekranie (rozpoznana z paragonu albo poprawiona ręcznie) i to ona
+     * -- razem z [liters] -- decyduje o wykryciu duplikatu (data-model.md).
+     * [odometerKm]/[amountPln] są opcjonalne i nie wpływają na wykrywanie duplikatu.
      */
-    fun onSubmit(liters: Double, odometerKm: Long?, amountPln: Double?) {
+    fun onSubmit(date: LocalDate, liters: Double, odometerKm: Long?, amountPln: Double?) {
         val current = _step.value as? CaptureStep.Confirming ?: return
         viewModelScope.launch {
-            val today = LocalDate.now()
             if (current.duplicateWarningLiters == liters) {
-                saveEntry(today, liters, odometerKm, amountPln, current)
+                saveEntry(date, liters, odometerKm, amountPln, current)
                 return@launch
             }
-            if (duplicateEntryChecker.isPossibleDuplicate(today, liters)) {
+            if (duplicateEntryChecker.isPossibleDuplicate(date, liters)) {
                 _step.value = current.copy(duplicateWarningLiters = liters)
             } else {
-                saveEntry(today, liters, odometerKm, amountPln, current)
+                saveEntry(date, liters, odometerKm, amountPln, current)
             }
         }
     }

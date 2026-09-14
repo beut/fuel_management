@@ -1,5 +1,7 @@
 package pl.fuelmanagement.tracker.ui.history
 
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,16 +21,29 @@ class HistoryViewModel(private val repository: FuelingEntryRepository) : ViewMod
 
     /**
      * @param odometerText/[amountText] mogą być puste -- czyszczą wtedy odpowiednie opcjonalne
-     * pole wpisu. @return `true`, gdy litersText jest poprawną wartością (> 0) i zapis się powiódł.
+     * pole wpisu. @return `true`, gdy [litersText] i [dateText] są poprawnymi wartościami
+     * (litry > 0, data w formacie RRRR-MM-DD) i zapis się powiódł.
      */
-    fun updateEntry(entry: FuelingEntryEntity, litersText: String, odometerText: String, amountText: String): Boolean {
+    fun updateEntry(
+        entry: FuelingEntryEntity,
+        litersText: String,
+        dateText: String,
+        odometerText: String,
+        amountText: String,
+    ): Boolean {
         val liters = litersText.replace(',', '.').toDoubleOrNull() ?: return false
         if (liters <= 0.0) return false
+        val date = try {
+            LocalDate.parse(dateText)
+        } catch (_: DateTimeParseException) {
+            return false
+        }
         val odometerKm = odometerText.toLongOrNull()
         val amountPln = amountText.replace(',', '.').toDoubleOrNull()
         viewModelScope.launch {
             repository.update(
                 entry.copy(
+                    dateEpochDay = date.toEpochDay(),
                     centiliters = Centiliters.fromLiters(liters),
                     odometerKm = odometerKm,
                     amountGrosze = amountPln?.let(Money::fromPln),

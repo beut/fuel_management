@@ -71,8 +71,8 @@ fun HistoryScreen(onBack: () -> Unit) {
         EditEntryDialog(
             entry = entry,
             onDismiss = { editingEntry = null },
-            onSave = { litersText, odometerText, amountText ->
-                if (viewModel.updateEntry(entry, litersText, odometerText, amountText)) editingEntry = null
+            onSave = { litersText, dateText, odometerText, amountText ->
+                if (viewModel.updateEntry(entry, litersText, dateText, odometerText, amountText)) editingEntry = null
             },
             onDelete = {
                 viewModel.delete(entry)
@@ -86,10 +86,11 @@ fun HistoryScreen(onBack: () -> Unit) {
 private fun EditEntryDialog(
     entry: FuelingEntryEntity,
     onDismiss: () -> Unit,
-    onSave: (litersText: String, odometerText: String, amountText: String) -> Unit,
+    onSave: (litersText: String, dateText: String, odometerText: String, amountText: String) -> Unit,
     onDelete: () -> Unit,
 ) {
     var litersText by remember(entry.id) { mutableStateOf("%.2f".format(entry.liters)) }
+    var dateText by remember(entry.id) { mutableStateOf(entry.date.toString()) }
     var odometerText by remember(entry.id) { mutableStateOf(entry.odometerKm?.toString() ?: "") }
     var amountText by remember(entry.id) { mutableStateOf(entry.amountPln?.let { "%.2f".format(it) } ?: "") }
 
@@ -103,6 +104,12 @@ private fun EditEntryDialog(
                     onValueChange = { litersText = it },
                     label = { Text("Litry") },
                     modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Data (RRRR-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = odometerText,
@@ -119,7 +126,7 @@ private fun EditEntryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(litersText, odometerText, amountText) }) { Text("Zapisz") }
+            TextButton(onClick = { onSave(litersText, dateText, odometerText, amountText) }) { Text("Zapisz") }
         },
         dismissButton = {
             Row {

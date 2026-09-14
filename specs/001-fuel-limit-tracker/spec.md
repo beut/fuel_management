@@ -115,6 +115,7 @@ Użytkownik przegląda historię wszystkich tankowań, podsumowanie zużycia pal
 - **FR-014**: System MUSI przechowywać wszystkie dane tankowań i limitu wyłącznie lokalnie w bazie danych na urządzeniu użytkownika.
 - **FR-015**: System MUSI automatycznie usuwać zdjęcie paragonu powiązane z wpisem tankowania po upływie 12 miesięcy od daty tankowania, zachowując przy tym wszystkie pozostałe dane wpisu (datę, liczbę litrów, źródło wartości).
 - **FR-016**: System POWINIEN dodatkowo rozpoznawać (OCR) przebieg pojazdu i kwotę zapłaconą za tankowanie, jeśli paragon zawiera te dane w rozpoznawalnej formie, i zapisywać je jako opcjonalne pola wpisu, z możliwością ręcznej korekty lub uzupełnienia przez użytkownika; brak odczytu tych pól nie blokuje zapisania wpisu, a same pola nie wpływają na wyliczenie pozostałego limitu (wyłącznie liczba litrów).
+- **FR-017**: System POWINIEN dodatkowo rozpoznawać (OCR) datę tankowania z paragonu, jeśli jest w rozpoznawalnej formie; jeśli data jest nieczytelna lub nierozpoznana, System MUSI przyjąć datę bieżącą jako wartość domyślną. W obu przypadkach data MUSI pozostać edytowalna przez użytkownika przed zapisem oraz później przy edycji wpisu (FR-013) — to ona (nie data zrobienia zdjęcia) wyznacza miesiąc kalendarzowy wpisu (FR-007).
 
 ### Key Entities *(include if feature involves data)*
 

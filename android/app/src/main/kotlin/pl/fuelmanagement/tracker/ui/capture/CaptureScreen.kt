@@ -55,6 +55,7 @@ fun CaptureScreen(onDone: () -> Unit) {
             suggestedLiters = currentStep.suggestedLiters,
             suggestedOdometerKm = currentStep.suggestedOdometerKm,
             suggestedAmountPln = currentStep.suggestedAmountPln,
+            initialDate = currentStep.date,
             hasPhoto = currentStep.photoFile != null,
             ocrRawText = currentStep.ocrRawText,
             duplicateWarningLiters = currentStep.duplicateWarningLiters,

@@ -21,35 +21,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 /**
  * Ekran potwierdzenia/wpisania liczby litrów (FR-003, FR-004, FR-005a): pokazuje wynik OCR gdy
  * zdjęcie zostało zrobione/wybrane (lub pusty formularz przy ręcznym wpisie bez zdjęcia --
- * [hasPhoto] = false), pozwala go poprawić lub wpisać ręcznie. [onSubmit] jest wywoływane przy
- * każdym naciśnięciu "Zapisz" -- decyzję, czy to pierwsza próba, czy potwierdzenie mimo ostrzeżenia
- * o duplikacie ([duplicateWarningLiters]), podejmuje wywołujący (`CaptureViewModel`), bo wymaga to
- * asynchronicznego zapytania do bazy (FR-005a).
+ * [hasPhoto] = false), pozwala go poprawić lub wpisać ręcznie. [initialDate] to data tankowania
+ * rozpoznana z paragonu, albo dzisiejsza, gdy nieczytelna (zawsze edytowalna, US1). [onSubmit] jest
+ * wywoływane przy każdym naciśnięciu "Zapisz" -- decyzję, czy to pierwsza próba, czy potwierdzenie
+ * mimo ostrzeżenia o duplikacie ([duplicateWarningLiters]), podejmuje wywołujący
+ * (`CaptureViewModel`), bo wymaga to asynchronicznego zapytania do bazy (FR-005a).
  */
 @Composable
 fun ReadingConfirmationScreen(
     suggestedLiters: Double?,
     suggestedOdometerKm: Long?,
     suggestedAmountPln: Double?,
+    initialDate: LocalDate,
     hasPhoto: Boolean,
     ocrRawText: String,
     duplicateWarningLiters: Double?,
-    onSubmit: (liters: Double, odometerKm: Long?, amountPln: Double?) -> Unit,
+    onSubmit: (date: LocalDate, liters: Double, odometerKm: Long?, amountPln: Double?) -> Unit,
     onCancel: () -> Unit,
 ) {
     var text by remember { mutableStateOf(suggestedLiters?.let { formatLiters(it) } ?: "") }
     var odometerText by remember { mutableStateOf(suggestedOdometerKm?.toString() ?: "") }
     var amountText by remember { mutableStateOf(suggestedAmountPln?.let { formatLiters(it) } ?: "") }
+    var dateText by remember { mutableStateOf(initialDate.toString()) }
     var showRawOcrText by remember { mutableStateOf(false) }
 
     val parsedLiters = text.replace(',', '.').toDoubleOrNull()
     val parsedOdometerKm = odometerText.toLongOrNull()
     val parsedAmountPln = amountText.replace(',', '.').toDoubleOrNull()
-    val canSubmit = parsedLiters != null && parsedLiters > 0.0
+    val parsedDate = try {
+        LocalDate.parse(dateText)
+    } catch (_: DateTimeParseException) {
+        null
+    }
+    val canSubmit = parsedLiters != null && parsedLiters > 0.0 && parsedDate != null
     val showDuplicateWarning = duplicateWarningLiters != null && duplicateWarningLiters == parsedLiters
 
     Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
@@ -67,6 +77,13 @@ fun ReadingConfirmationScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
 
+        OutlinedTextField(
+            value = dateText,
+            onValueChange = { dateText = it },
+            isError = parsedDate == null,
+            label = { Text("Data tankowania (RRRR-MM-DD)") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
         OutlinedTextField(
             value = odometerText,
             onValueChange = { odometerText = it },
@@ -109,7 +126,11 @@ fun ReadingConfirmationScreen(
             TextButton(onClick = onCancel) { Text("Anuluj") }
             Button(
                 enabled = canSubmit,
-                onClick = { parsedLiters?.let { onSubmit(it, parsedOdometerKm, parsedAmountPln) } },
+                onClick = {
+                    if (parsedLiters != null && parsedDate != null) {
+                        onSubmit(parsedDate, parsedLiters, parsedOdometerKm, parsedAmountPln)
+                    }
+                },
             ) { Text("Zapisz") }
         }
     }

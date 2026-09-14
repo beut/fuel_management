@@ -9,6 +9,8 @@ import android.media.ExifInterface
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
 import java.io.IOException
+import java.time.DateTimeException
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,8 +45,11 @@ class ReceiptOcrReader(context: Context) {
 
     /**
      * [suggestedLiters]: `null`, gdy nie udało się jednoznacznie wyodrębnić liczby litrów.
-     * [suggestedOdometerKm]/[suggestedAmountPln]: `null`, gdy paragon nie zawiera rozpoznawalnego
-     * pola przebiegu/kwoty -- to pola opcjonalne, w przeciwieństwie do litrów.
+     * [suggestedOdometerKm]/[suggestedAmountPln]/[suggestedDate]: `null`, gdy paragon nie zawiera
+     * rozpoznawalnego pola przebiegu/kwoty/daty -- to pola opcjonalne, w przeciwieństwie do litrów;
+     * [suggestedDate] jest `null` również, gdy rozpoznana data jest nieplauzybilna (przyszła o
+     * więcej niż dzień lub starsza niż 2 lata) -- w takim wypadku wywołujący (`CaptureViewModel`)
+     * przyjmuje dzisiejszą datę jako domyślną, z możliwością ręcznej korekty (FR-003).
      * [rawText]: pełny tekst rozpoznany przez Tesseract -- pokazywany na ekranie potwierdzenia jako
      * diagnostyka, gdy automatyczny odczyt jest błędny.
      */
@@ -52,17 +57,18 @@ class ReceiptOcrReader(context: Context) {
         val suggestedLiters: Double?,
         val suggestedOdometerKm: Long?,
         val suggestedAmountPln: Double?,
+        val suggestedDate: LocalDate?,
         val rawText: String,
     )
 
     suspend fun recognize(photoFile: File): OcrResult = withContext(Dispatchers.IO) {
         val bitmap = decodeUprightBitmap(photoFile)
-            ?: return@withContext OcrResult(null, null, null, "")
+            ?: return@withContext OcrResult(null, null, null, null, "")
         val dataPath = ensureTessDataReady()
         val tess = TessBaseAPI()
         try {
             if (!tess.init(dataPath.absolutePath, LANGUAGE)) {
-                return@withContext OcrResult(null, null, null, "")
+                return@withContext OcrResult(null, null, null, null, "")
             }
             tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
             tess.setImage(bitmap)
@@ -82,7 +88,8 @@ class ReceiptOcrReader(context: Context) {
                 DECIMAL_REGEX,
                 MIN_PLAUSIBLE_AMOUNT_PLN..MAX_PLAUSIBLE_AMOUNT_PLN,
             )
-            OcrResult(suggestedLiters, suggestedOdometerKm, suggestedAmountPln, rawText)
+            val suggestedDate = findKeywordedDate(lines)
+            OcrResult(suggestedLiters, suggestedOdometerKm, suggestedAmountPln, suggestedDate, rawText)
         } finally {
             tess.recycle()
             bitmap.recycle()
@@ -249,6 +256,42 @@ class ReceiptOcrReader(context: Context) {
     }
 
     /**
+     * Szuka daty tankowania (etykieta "DATA") w formacie DD.MM.RRRR / DD-MM-RRRR / DD/MM/RRRR,
+     * analogicznie do [findKeywordedValue] (najpierw ta sama linia co słowo kluczowe, potem
+     * dowolne słowo w tym samym wierszu na obrazie). Odrzuca daty nieplauzybilne dla świeżo
+     * zrobionego zdjęcia paragonu (więcej niż dzień w przyszłości lub starsze niż 2 lata) --
+     * prawdopodobny błąd odczytu, a nie faktyczna data tankowania.
+     */
+    private fun findKeywordedDate(lines: List<Line>): LocalDate? {
+        for (line in lines) {
+            if (!lineMatchesKeyword(line, DATE_KEYWORD_REGEX)) continue
+            parsePlausibleDate(line.text)?.let { return it }
+        }
+        val keywordBoxes = keywordRowBoxes(lines, DATE_KEYWORD_REGEX)
+        for (line in lines) {
+            for (word in line.words) {
+                if (keywordBoxes.none { isSameRow(it, word.box) }) continue
+                parsePlausibleDate(word.text)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun parsePlausibleDate(text: String): LocalDate? {
+        val match = DATE_REGEX.find(text) ?: return null
+        val day = match.groupValues[1].toIntOrNull() ?: return null
+        val month = match.groupValues[2].toIntOrNull() ?: return null
+        val year = match.groupValues[3].toIntOrNull() ?: return null
+        val date = try {
+            LocalDate.of(year, month, day)
+        } catch (_: DateTimeException) {
+            return null
+        }
+        val today = LocalDate.now()
+        return date.takeIf { it <= today.plusDays(1) && it >= today.minusYears(2) }
+    }
+
+    /**
      * Zbiera ramki ([Rect]) wszystkich wystąpień [keywordRegex] w tekście paragonu -- zarówno
      * pojedynczych słów, jak i całych linii dopasowanych PO USUNIĘCIU SPACJI (żeby złapać
      * przypadki, gdy OCR rozbił jedno słowo etykiety na kilka tokenów, np. "War tość:" zamiast
@@ -288,8 +331,10 @@ class ReceiptOcrReader(context: Context) {
         private val LITER_KEYWORD_REGEX = Regex("""LITR|ILOSC|ILOŚĆ|QUANTITY""")
         private val ODOMETER_KEYWORD_REGEX = Regex("""LICZNIK|PRZEBIEG|ODOMETER""")
         private val AMOUNT_KEYWORD_REGEX = Regex("""KWOTA|WARTOSC|WARTOŚĆ|AMOUNT""")
+        private val DATE_KEYWORD_REGEX = Regex("""DATA|DATE""")
         private val DECIMAL_REGEX = Regex("""\d{1,4}[.,]\d{1,3}""")
         private val INTEGER_REGEX = Regex("""\d{3,7}""")
+        private val DATE_REGEX = Regex("""(\d{1,2})[./-](\d{1,2})[./-](\d{4})""")
         private val UNIT_L_REGEX = Regex("""^L\.?$""", RegexOption.IGNORE_CASE)
         private const val MIN_PLAUSIBLE_LITERS = 0.5
         private const val MAX_PLAUSIBLE_LITERS = 300.0
