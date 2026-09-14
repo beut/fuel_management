@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
  * Ekran potwierdzenia/wpisania liczby litrów (FR-003, FR-004, FR-005a): pokazuje wynik OCR gdy
  * zdjęcie zostało zrobione/wybrane (lub pusty formularz przy ręcznym wpisie bez zdjęcia --
  * [hasPhoto] = false), pozwala go poprawić lub wpisać ręcznie. [onSubmit] jest wywoływane przy
- * każdym naciśnięciu „Zapisz" -- decyzję, czy to pierwsza próba, czy potwierdzenie mimo ostrzeżenia
+ * każdym naciśnięciu "Zapisz" -- decyzję, czy to pierwsza próba, czy potwierdzenie mimo ostrzeżenia
  * o duplikacie ([duplicateWarningLiters]), podejmuje wywołujący (`CaptureViewModel`), bo wymaga to
  * asynchronicznego zapytania do bazy (FR-005a).
  */
@@ -63,7 +63,7 @@ fun ReadingConfirmationScreen(
 
         if (showDuplicateWarning) {
             Text(
-                "Wpis z taką samą datą i liczbą litrów już istnieje. Naciśnij „Zapisz" ponownie, aby zapisać mimo to.",
+                "Wpis z taką samą datą i liczbą litrów już istnieje. Naciśnij \"Zapisz\" ponownie, aby zapisać mimo to.",
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp),
             )

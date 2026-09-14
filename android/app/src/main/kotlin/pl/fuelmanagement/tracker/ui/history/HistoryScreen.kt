@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,7 +54,7 @@ fun HistoryScreen(onBack: () -> Unit) {
                         Text("${entry.date} — %.2f l (${entry.source})".format(entry.liters))
                     }
                     TextButton(onClick = { editingEntry = entry }) { Text("Edytuj / usuń") }
-                    Divider()
+                    HorizontalDivider()
                 }
             }
         }
