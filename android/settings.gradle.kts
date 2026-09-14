@@ -11,6 +11,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Tesseract4Android (research.md -> "Rozpoznawanie liczby litrów z paragonu (OCR)") jest
+        // dystrybuowany przez JitPack, nie Maven Central.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

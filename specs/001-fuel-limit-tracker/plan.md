@@ -8,13 +8,13 @@
 
 ## Summary
 
-Natywna aplikacja na Androida do śledzenia miesięcznego limitu paliwa na służbowej karcie. Użytkownik robi zdjęcie paragonu ze stacji benzynowej, aplikacja lokalnie (on-device, offline, ML Kit Text Recognition) rozpoznaje liczbę zatankowanych litrów, a po potwierdzeniu/korekcie zapisuje wpis w lokalnej bazie danych. Ekran główny pokazuje, ile litrów pozostało do wykorzystania w bieżącym miesiącu (limit obowiązujący w tym miesiącu minus suma zatankowanych litrów od 1. dnia miesiąca) — reset następuje samoczynnie, bo wartość jest zawsze liczona względem bieżącego miesiąca kalendarzowego, bez potrzeby jawnego zadania resetującego. Zmiana limitu wchodzi w życie dopiero od kolejnego miesiąca, więc limit jest przechowywany jako historia wartości w czasie. Aplikacja udostępnia historię tankowań, podsumowanie miesięczne i porównanie miesiąc do miesiąca. Zdjęcia paragonów są automatycznie usuwane po 12 miesiącach. Dane przechowywane są wyłącznie lokalnie (Room + pliki zdjęć), v1 obsługuje jedną kartę/jeden limit na instalację, bez backendu i bez synchronizacji w chmurze.
+Natywna aplikacja na Androida do śledzenia miesięcznego limitu paliwa na służbowej karcie. Użytkownik robi zdjęcie paragonu ze stacji benzynowej, aplikacja lokalnie (on-device, offline, Tesseract4Android) rozpoznaje liczbę zatankowanych litrów, a po potwierdzeniu/korekcie zapisuje wpis w lokalnej bazie danych. Ekran główny pokazuje, ile litrów pozostało do wykorzystania w bieżącym miesiącu (limit obowiązujący w tym miesiącu minus suma zatankowanych litrów od 1. dnia miesiąca) — reset następuje samoczynnie, bo wartość jest zawsze liczona względem bieżącego miesiąca kalendarzowego, bez potrzeby jawnego zadania resetującego. Zmiana limitu wchodzi w życie dopiero od kolejnego miesiąca, więc limit jest przechowywany jako historia wartości w czasie. Aplikacja udostępnia historię tankowań, podsumowanie miesięczne i porównanie miesiąc do miesiąca. Zdjęcia paragonów są automatycznie usuwane po 12 miesiącach. Dane przechowywane są wyłącznie lokalnie (Room + pliki zdjęć), v1 obsługuje jedną kartę/jeden limit na instalację, bez backendu i bez synchronizacji w chmurze.
 
 ## Technical Context
 
 **Language/Version**: Kotlin, Android API 26+ (Android 8.0+)
 
-**Primary Dependencies**: Jetpack Compose (UI), CameraX (przechwytywanie zdjęcia paragonu), ML Kit Text Recognition — model on-device (OCR liczby litrów), Room (lokalna baza danych), WorkManager (okresowe zadanie porządkowe usuwające zdjęcia paragonów starsze niż 12 miesięcy, FR-015)
+**Primary Dependencies**: Jetpack Compose (UI), CameraX (przechwytywanie zdjęcia paragonu), Tesseract4Android — OCR w pełni on-device z jawną kontrolą segmentacji strony (`PSM_SINGLE_BLOCK`), dane językowe `pol.traineddata` spakowane w APK (zastąpił pierwotnie wybrany ML Kit Text Recognition po testach na realnych paragonach — patrz research.md), Room (lokalna baza danych), WorkManager (okresowe zadanie porządkowe usuwające zdjęcia paragonów starsze niż 12 miesięcy, FR-015)
 
 **Storage**: Room (SQLite) dla danych strukturalnych (`FuelingEntry`, `MonthlyLimit`); zdjęcia paragonów jako pliki w pamięci wewnętrznej aplikacji, referencjonowane ścieżką z Room
 
@@ -68,7 +68,7 @@ android/
 │   │   │   │   ├── data/
 │   │   │   │   │   ├── db/           # Room: encje, DAO, baza (FuelingEntry, MonthlyLimit)
 │   │   │   │   │   ├── photo/        # zapis/odczyt plików zdjęć paragonów w pamięci wewnętrznej
-│   │   │   │   │   └── ocr/          # integracja z ML Kit Text Recognition (parsowanie litrów z tekstu paragonu)
+│   │   │   │   │   └── ocr/          # integracja z Tesseract4Android (parsowanie litrów/przebiegu/kwoty z tekstu paragonu)
 │   │   │   │   ├── domain/
 │   │   │   │   │   ├── limit/        # wyliczanie pozostałego limitu, dobór obowiązującego MonthlyLimit dla miesiąca
 │   │   │   │   │   ├── duplicate/    # wykrywanie potencjalnego duplikatu wpisu (FR-005a)
@@ -88,7 +88,7 @@ android/
 └── settings.gradle.kts
 ```
 
-**Structure Decision**: Pojedynczy moduł aplikacji Android (`android/app`) z wewnętrznym podziałem warstwowym `data` / `domain` / `cleanup` / `ui`, bez wydzielonych modułów Gradle ani osobnego backendu — analogicznie do wzorca z referencyjnego projektu [water_storage](https://github.com/beut/water_storage) (monitor zbiornika na podstawie zdjęć licznika: ta sama para CameraX + on-device ML Kit OCR + Room, ten sam podział `data`/`domain`/`ui`), uzasadniony ograniczonym zakresem v1 (jedna karta/limit, brak wielu użytkowników, przetwarzanie w pełni lokalne).
+**Structure Decision**: Pojedynczy moduł aplikacji Android (`android/app`) z wewnętrznym podziałem warstwowym `data` / `domain` / `cleanup` / `ui`, bez wydzielonych modułów Gradle ani osobnego backendu — architektura (podział `data`/`domain`/`ui`, ręczne DI, CameraX + on-device OCR + Room) analogiczna do wzorca z referencyjnego projektu [water_storage](https://github.com/beut/water_storage) (monitor zbiornika na podstawie zdjęć licznika), choć silnik OCR odbiegł od tego wzorca (Tesseract4Android zamiast ML Kit — patrz research.md), uzasadniona ograniczonym zakresem v1 (jedna karta/limit, brak wielu użytkowników, przetwarzanie w pełni lokalne).
 
 ## Complexity Tracking
 

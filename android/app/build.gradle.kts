@@ -15,8 +15,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         ndk {
-            // Ogranicza natywne biblioteki (CameraX/ML Kit) do arm64-v8a w celu zmniejszenia
-            // rozmiaru debug APK -- pokrywa niemal wszystkie współczesne telefony z Androidem.
+            // Ogranicza natywne biblioteki (CameraX/Tesseract4Android) do arm64-v8a w celu
+            // zmniejszenia rozmiaru debug APK -- pokrywa niemal wszystkie współczesne telefony.
             abiFilters += "arm64-v8a"
         }
     }
@@ -66,10 +66,12 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
 
-    // OCR w pełni on-device (research.md -> "Rozpoznawanie liczby litrów z paragonu (OCR)", FR-002)
-    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // OCR w pełni on-device (research.md -> "Rozpoznawanie liczby litrów z paragonu (OCR)", FR-002).
+    // Tesseract4Android zamiast ML Kit Text Recognition -- realne testy pokazały, że ML Kit
+    // niekontrolowanie segmentuje dwukolumnowe paragony na osobne bloki, gubiąc dopasowanie
+    // etykiety do wartości; Tesseract pozwala jawnie wymusić PSM_SINGLE_BLOCK.
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     // Lokalne przechowywanie danych (research.md -> "Przechowywanie danych")
     implementation("androidx.room:room-runtime:2.6.1")

@@ -251,3 +251,19 @@ Po ukończeniu T001–T040 użytkownik poprosił bezpośrednio (poza formalną s
 - `ui/capture/*`, `ui/history/*` — pola edytowalne na ekranie potwierdzenia i w historii.
 
 Zweryfikowane przez `./gradlew assembleDebug` (BUILD SUCCESSFUL); nie przetestowane na realnym paragonie/urządzeniu w tej sesji.
+
+---
+
+## Post-implementation: zamiana silnika OCR ML Kit → Tesseract4Android
+
+Po dwóch nieudanych próbach naprawy dopasowania litrów (dopasowanie po kolejności linii, potem po pozycji geometrycznej — patrz historia commitów), rzeczywisty test na paragonie użytkownika (przycisk "Pokaż tekst rozpoznany przez OCR") ujawnił, że ML Kit Text Recognition błędnie segmentuje dwukolumnowy układ paragonu: etykieta "Kwota:" w ogóle nie została wykryta, "Wartość:" rozbite na dwa tokeny przez błędną spację, a kolejność odczytanych wartości nie odpowiadała układowi wizualnemu paragonu. Publiczne API ML Kit nie daje kontroli nad tym zachowaniem. Użytkownik poprosił o zmianę biblioteki OCR; zaimplementowano to jako T018 (redo) — ta sama rola/lokalizacja pliku (`data/ocr/ReceiptOcrReader.kt`), inna biblioteka:
+
+- **research.md** → sekcja "Rozpoznawanie liczby litrów z paragonu (OCR)" zaktualizowana: Tesseract4Android (`cz.adaptech.tesseract4android:tesseract4android:4.9.0`, JitPack) zamiast ML Kit, z jawnie wymuszonym `PSM_SINGLE_BLOCK` (kontrola segmentacji, której ML Kit nie udostępniał).
+- **plan.md** → Primary Dependencies, struktura projektu i porównanie z water_storage zaktualizowane.
+- `android/settings.gradle.kts` — dodano repozytorium JitPack.
+- `android/app/build.gradle.kts` — usunięto `com.google.mlkit:text-recognition` i `kotlinx-coroutines-play-services` (niepotrzebne bez ML Kit Task API), dodano `tesseract4android`.
+- `android/app/src/main/assets/tessdata/pol.traineddata` — dane językowe (wariant "fast", ~4,7 MB), spakowane w APK, kopiowane do prywatnego katalogu aplikacji przy pierwszym użyciu (bez sieci, FR-002/FR-014).
+- `data/ocr/ReceiptOcrReader.kt` — przepisany na `TessBaseAPI`; ta sama logika dopasowania geometrycznego (ten sam wiersz na obrazie) i ta sama zasada "brak kontekstu → `null`, nie zgadywanie", przeniesione z modelu ML Kit (`Text.Line`/`Text.Element`) na własne proste typy `Line`/`Word` budowane z iteratora wyników Tesseract.
+- `AppContainer.kt` — `ReceiptOcrReader` wymaga teraz `Context` (do skopiowania danych językowych z assets).
+
+Zweryfikowane przez `./gradlew assembleDebug` (BUILD SUCCESSFUL); **nie przetestowane jeszcze na realnym paragonie/urządzeniu** — wymaga ponownego testu przez użytkownika na tym samym (i najlepiej też na płaskim/dobrze oświetlonym) paragonie.

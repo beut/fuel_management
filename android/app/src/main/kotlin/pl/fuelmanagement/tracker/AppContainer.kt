@@ -18,7 +18,7 @@ class AppContainer(context: Context) {
     private val database = AppDatabase.getInstance(context)
 
     val photoStorage = PhotoStorage(context)
-    val ocrReader = ReceiptOcrReader()
+    val ocrReader = ReceiptOcrReader(context)
 
     val fuelingEntryRepository = FuelingEntryRepository(database.fuelingEntryDao())
     val monthlyLimitRepository = MonthlyLimitRepository(database.monthlyLimitDao())
