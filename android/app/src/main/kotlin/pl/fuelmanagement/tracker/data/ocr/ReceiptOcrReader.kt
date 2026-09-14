@@ -1,6 +1,7 @@
 package pl.fuelmanagement.tracker.data.ocr
 
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
@@ -14,21 +15,21 @@ import kotlinx.coroutines.tasks.await
  * ML Kit Text Recognition spakowanego z aplikacją (research.md -> "Rozpoznawanie liczby litrów z
  * paragonu (OCR)", FR-002). Nie wykonuje żadnych wywołań sieciowych.
  *
- * Paragony stacji paliw bywają dwukolumnowe (etykieta po lewej, wartość wyrównana do prawej w tym
- * samym wierszu, np. "Ilość:" ... "18.800"), a ML Kit potrafi je posegmentować zaskakująco różnie
- * -- czasem jako jedną linię na wiersz, czasem jako dwa osobne `TextBlock` (cała kolumna etykiet,
- * potem cała kolumna wartości), a czasem sklejając kilka gęsto upakowanych wierszy w jedną linię z
- * wieloma liczbami naraz. Żadne z tych trzech zachowań nie jest przewidywalne z góry, więc
- * dopasowanie liczby do etykiety odbywa się na poziomie pojedynczych słów/tokenów
- * ([com.google.mlkit.vision.text.Text.Element], nie całych linii) PO POŁOŻENIU GEOMETRYCZNYM (ten
- * sam wiersz na obrazie, wg [android.graphics.Rect] elementu) -- to jedyny poziom granulacji, który
- * poprawnie paruje "Ilość:" z "18.800" niezależnie od tego, jak ML Kit pogrupował resztę tekstu.
+ * Realne testy na zdjęciach paragonów (w tym pomiętych/zakrzywionych) pokazały, że ML Kit potrafi
+ * posegmentować dwukolumnowy układ (etykieta po lewej, wartość po prawej) na wiele sposobów -- w
+ * tej samej linii, w dwóch osobnych `TextBlock` (cała kolumna etykiet, potem cała kolumna
+ * wartości), a nawet rozbijając pojedyncze słowo etykiety na kilka tokenów przez błędnie wstawioną
+ * spację (np. "Wartość:" odczytane jako dwa tokeny "War" / "tość:"). Dlatego wykrywanie słowa
+ * kluczowego działa na DWÓCH poziomach jednocześnie: pojedynczy token ORAZ cała linia (tekst całej
+ * linii, bez spacji) -- a dopasowanie liczby do wykrytego słowa kluczowego odbywa się PO POŁOŻENIU
+ * GEOMETRYCZNYM (ten sam wiersz na obrazie, wg [android.graphics.Rect]), nie po kolejności w
+ * spłaszczonej liście linii, bo ta kolejność okazała się niemiarodajna.
  *
- * Paragon zawiera wiele innych liczb poza szukanymi wartościami (cena jednostkowa, numer
- * paragonu/NIP, godzina, numer autoryzacji) -- generyczny model OCR nie rozróżnia ich semantycznie,
- * więc wynik jest heurystyką, nie gwarancją. Gdy nie da się jednoznacznie wybrać kandydata,
- * odpowiednie pole wyniku jest `null` -- bezpieczniejsze niż zgadywanie; użytkownik
- * wprowadza/koryguje wartości ręcznie na ekranie potwierdzenia (FR-003).
+ * Mimo to część paragonów (np. mocno pogięty papier, słaby kontrast) jest na tyle zniekształcona,
+ * że OCR w ogóle nie wykrywa niektórych etykiet -- w takim wypadku [OcrResult.suggestedLiters] MUSI
+ * pozostać `null` zamiast zgadywać między nierozróżnialnymi kandydatami (patrz [pickBest]);
+ * bezpieczniejszy pusty wynik niż pewna siebie, błędna podpowiedź -- użytkownik wpisuje/koryguje
+ * wartość ręcznie na ekranie potwierdzenia (FR-003).
  */
 class ReceiptOcrReader {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -56,14 +57,16 @@ class ReceiptOcrReader {
         val lines = result.textBlocks.flatMap { it.lines }
         val elements = lines.flatMap { it.elements }
 
-        val suggestedLiters = pickBest(extractLiterCandidates(lines, elements))?.value
+        val suggestedLiters = pickBest(extractLiterCandidates(lines))?.value
         val suggestedOdometerKm = findKeywordedValue(
+            lines,
             elements,
             ODOMETER_KEYWORD_REGEX,
             INTEGER_REGEX,
             MIN_PLAUSIBLE_ODOMETER_KM..MAX_PLAUSIBLE_ODOMETER_KM,
         )?.let(Math::round)
         val suggestedAmountPln = findKeywordedValue(
+            lines,
             elements,
             AMOUNT_KEYWORD_REGEX,
             DECIMAL_REGEX,
@@ -79,13 +82,14 @@ class ReceiptOcrReader {
      * paragonu:
      * - token z liczbą, po którym w TEJ SAMEJ linii następuje token "L" (jednostka), dostaje
      *   najwyższą wagę,
-     * - token z liczbą leżący w tym samym wierszu na obrazie ([isSameRow]) co jakikolwiek token ze
-     *   słowem kluczowym ("LITR", "ILOŚĆ"/"ILOSC") -- niezależnie od tego, do której linii/bloku ML
-     *   Kit go przypisał -- dostaje wagę pośrednią,
+     * - token z liczbą leżący w tym samym wierszu na obrazie ([isSameRow]) co dowolne wykryte
+     *   wystąpienie słowa kluczowego ("LITR", "ILOŚĆ"/"ILOSC") -- patrz [keywordRowBoxes] -- dostaje
+     *   wagę pośrednią,
      * - liczby spoza plauzybilnego zakresu pojemności baku (0,5-300 l) są odrzucane, żeby nie
      *   pomylić ilości litrów z ceną jednostkową (zwykle < 10) czy kwotą razem (bywa > 300).
      */
-    private fun extractLiterCandidates(lines: List<Text.Line>, allElements: List<Text.Element>): List<Candidate> {
+    private fun extractLiterCandidates(lines: List<Text.Line>): List<Candidate> {
+        val keywordBoxes = keywordRowBoxes(lines, LITER_KEYWORD_REGEX)
         val candidates = mutableListOf<Candidate>()
         for (line in lines) {
             val elements = line.elements
@@ -94,8 +98,8 @@ class ReceiptOcrReader {
                 val value = match.value.replace(',', '.').toDoubleOrNull() ?: continue
                 if (value !in MIN_PLAUSIBLE_LITERS..MAX_PLAUSIBLE_LITERS) continue
                 val nextElementIsUnitL = elements.getOrNull(index + 1)?.text?.trim()?.let(UNIT_L_REGEX::matches) == true
-                val hasKeywordNearby = LITER_KEYWORD_REGEX.containsMatchIn(element.text.uppercase()) ||
-                    hasKeywordInSameRow(allElements, element, LITER_KEYWORD_REGEX)
+                val elementBox = element.boundingBox
+                val hasKeywordNearby = elementBox != null && keywordBoxes.any { isSameRow(it, elementBox) }
                 val weight = when {
                     nextElementIsUnitL -> 3
                     hasKeywordNearby -> 2
@@ -107,52 +111,83 @@ class ReceiptOcrReader {
         return candidates
     }
 
-    /** Spośród kandydatów na litry wybiera tego o najwyższej wadze (bliskość słowa kluczowego / jednostki "l"). */
+    /**
+     * Spośród kandydatów na litry wybiera tego o najwyższej wadze (bliskość słowa kluczowego /
+     * jednostki "l") -- ale TYLKO jeśli ma choć jakieś potwierdzenie kontekstowe (`weight > 1`).
+     * Gdy paragon jest na tyle nieczytelny/zniekształcony, że OCR nie rozpoznał żadnej etykiety w
+     * pobliżu żadnej liczby (wszyscy kandydaci `weight == 1` -- "jakaś liczba w plauzybilnym
+     * zakresie, bez kontekstu"), zwracamy `null` zamiast zgadywać między nierozróżnialnymi
+     * kandydatami (np. kwotą a ilością litrów) -- zgodnie z zasadą klasy: bezpieczniejszy pusty
+     * wynik niż pewna siebie, błędna podpowiedź (FR-003, ręczna korekta).
+     */
     private fun pickBest(candidates: List<Candidate>): Candidate? =
-        candidates.maxByOrNull { it.weight }
+        candidates.filter { it.weight > 1 }.maxByOrNull { it.weight }
 
     /**
      * Szuka wartości opcjonalnego pola (przebieg/kwota), które -- w odróżnieniu od litrów -- MUSI
      * być powiązane ze słowem kluczowym, żeby w ogóle zostać zaakceptowane (bez tego wymogu zbyt
      * łatwo pomylić przebieg czy kwotę z dowolną inną liczbą na paragonie, np. numerem
-     * autoryzacji). Sprawdza najpierw token ze słowem kluczowym, a jeśli nie zawiera on też
-     * wartości -- każdy inny token leżący w tym samym wierszu na obrazie ([isSameRow]).
+     * autoryzacji). Sprawdza najpierw linię zawierającą słowo kluczowe, a jeśli sama nie zawiera
+     * też wartości -- każdy token leżący w tym samym wierszu na obrazie co wykryte słowo kluczowe.
      */
     private fun findKeywordedValue(
+        lines: List<Text.Line>,
         elements: List<Text.Element>,
         keywordRegex: Regex,
         valueRegex: Regex,
         plausibleRange: ClosedFloatingPointRange<Double>,
     ): Double? {
-        for (keywordElement in elements) {
-            if (!keywordRegex.containsMatchIn(keywordElement.text.uppercase())) continue
-            val sameElementMatch = valueRegex.find(keywordElement.text)
-            val match = sameElementMatch ?: elements
-                .asSequence()
-                .filter { it !== keywordElement && isSameRow(keywordElement, it) }
-                .mapNotNull { valueRegex.find(it.text) }
-                .firstOrNull()
-            val value = match?.value?.replace(',', '.')?.toDoubleOrNull() ?: continue
+        for (line in lines) {
+            if (!lineMatchesKeyword(line, keywordRegex)) continue
+            valueRegex.find(line.text)?.let { match ->
+                val value = match.value.replace(',', '.').toDoubleOrNull()
+                if (value != null && value in plausibleRange) return value
+            }
+        }
+        val keywordBoxes = keywordRowBoxes(lines, keywordRegex)
+        for (element in elements) {
+            val box = element.boundingBox ?: continue
+            if (keywordBoxes.none { isSameRow(it, box) }) continue
+            val match = valueRegex.find(element.text) ?: continue
+            val value = match.value.replace(',', '.').toDoubleOrNull() ?: continue
             if (value in plausibleRange) return value
         }
         return null
     }
 
-    /** `true`, gdy jakiś element inny niż [target], leżący w tym samym wierszu ([isSameRow]), zawiera [keywordRegex]. */
-    private fun hasKeywordInSameRow(elements: List<Text.Element>, target: Text.Element, keywordRegex: Regex): Boolean =
-        elements.any { it !== target && isSameRow(target, it) && keywordRegex.containsMatchIn(it.text.uppercase()) }
+    /**
+     * Zbiera ramki ([Rect]) wszystkich wystąpień [keywordRegex] w tekście paragonu -- zarówno
+     * pojedynczych tokenów, jak i całych linii dopasowanych PO USUNIĘCIU SPACJI (żeby złapać
+     * przypadki, gdy OCR rozbił jedno słowo etykiety na kilka tokenów, np. "War tość:" zamiast
+     * "Wartość:") -- używane do dopasowania liczby po wspólnym wierszu na obrazie ([isSameRow]).
+     */
+    private fun keywordRowBoxes(lines: List<Text.Line>, keywordRegex: Regex): List<Rect> {
+        val boxes = mutableListOf<Rect>()
+        for (line in lines) {
+            if (lineMatchesKeyword(line, keywordRegex)) {
+                line.boundingBox?.let { boxes += it }
+            }
+            for (element in line.elements) {
+                if (keywordRegex.containsMatchIn(element.text.uppercase())) {
+                    element.boundingBox?.let { boxes += it }
+                }
+            }
+        }
+        return boxes
+    }
+
+    private fun lineMatchesKeyword(line: Text.Line, keywordRegex: Regex): Boolean =
+        keywordRegex.containsMatchIn(line.text.replace(" ", "").uppercase())
 
     /**
      * `true`, gdy środki pionowe ramek [a] i [b] różnią się o mniej niż połowa wysokości wyższej z
      * nich -- traktujemy to jako "ten sam wiersz na obrazie" niezależnie od tego, do której linii
      * lub `TextBlock` ML Kit przypisał każdy z elementów (patrz dokumentacja klasy wyżej).
      */
-    private fun isSameRow(a: Text.Element, b: Text.Element): Boolean {
-        val boxA = a.boundingBox ?: return false
-        val boxB = b.boundingBox ?: return false
-        val centerA = (boxA.top + boxA.bottom) / 2
-        val centerB = (boxB.top + boxB.bottom) / 2
-        val tolerance = maxOf(boxA.height(), boxB.height()) / 2
+    private fun isSameRow(a: Rect, b: Rect): Boolean {
+        val centerA = (a.top + a.bottom) / 2
+        val centerB = (b.top + b.bottom) / 2
+        val tolerance = maxOf(a.height(), b.height()) / 2
         return kotlin.math.abs(centerA - centerB) <= tolerance
     }
 
