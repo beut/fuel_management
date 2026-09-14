@@ -1,10 +1,14 @@
 package pl.fuelmanagement.tracker.data.ocr
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.graphics.Rect
+import android.media.ExifInterface
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -52,7 +56,7 @@ class ReceiptOcrReader(context: Context) {
     )
 
     suspend fun recognize(photoFile: File): OcrResult = withContext(Dispatchers.IO) {
-        val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+        val bitmap = decodeUprightBitmap(photoFile)
             ?: return@withContext OcrResult(null, null, null, "")
         val dataPath = ensureTessDataReady()
         val tess = TessBaseAPI()
@@ -83,6 +87,39 @@ class ReceiptOcrReader(context: Context) {
             tess.recycle()
             bitmap.recycle()
         }
+    }
+
+    /**
+     * Dekoduje zdjęcie i obraca je zgodnie z flagą EXIF `Orientation`, jeśli jest ustawiona.
+     * Aparaty telefonów bardzo często zapisują piksele w orientacji "poziomej" niezależnie od
+     * fizycznego trzymania telefonu, opisując właściwy obrót wyłącznie w metadanych EXIF -- ani
+     * `BitmapFactory`, ani `TessBaseAPI.setImage(Bitmap)` nie odczytują tej flagi automatycznie.
+     * Podanie Tesseractowi obrazu w złej orientacji (np. tekst biegnący pionowo zamiast poziomo)
+     * przy trybie [TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK] (bez automatycznego wykrywania
+     * obrotu) daje w wyniku bezsensowny, losowy tekst -- stąd ta korekta jest konieczna, nie
+     * kosmetyczna.
+     */
+    private fun decodeUprightBitmap(file: File): Bitmap? {
+        val original = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+        val orientation = try {
+            ExifInterface(file.absolutePath).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL,
+            )
+        } catch (_: IOException) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+        val rotationDegrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
+        if (rotationDegrees == 0) return original
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        val rotated = Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true)
+        original.recycle()
+        return rotated
     }
 
     /** Kopiuje dane językowe z assets do prywatnego katalogu aplikacji przy pierwszym użyciu (FR-002, FR-014: brak sieci). */
