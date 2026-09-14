@@ -237,3 +237,17 @@ Task: "Utworzyć ReceiptOcrReader w data/ocr/ReceiptOcrReader.kt"
 - Commituj po każdym zadaniu lub logicznej grupie zadań
 - Zatrzymaj się przy każdym checkpoincie, aby zwalidować historyjkę niezależnie
 - Unikaj: niejasnych zadań, konfliktów w tym samym pliku, zależności między historyjkami łamiących ich niezależność
+
+---
+
+## Post-implementation: FR-016 (przebieg + kwota tankowania)
+
+Po ukończeniu T001–T040 użytkownik poprosił bezpośrednio (poza formalną sesją `/speckit-clarify`/`/speckit-tasks`) o dodanie do wpisu opcjonalnego przebiegu i kwoty tankowania, odczytywanych przez OCR "jeśli uda się odczytać". Zaimplementowano jako FR-016 (spec.md) bez pełnego przebiegu przez `/speckit-plan`/`/speckit-tasks`, ponieważ zmiana jest addytywna i niewielka (dwa nowe nullable pola, bez wpływu na logikę limitu/US1–US4):
+
+- `data-model.md` → `FuelingEntry.odometerKm`/`amountGrosze` udokumentowane.
+- `data/db/entities/FuelingEntryEntity.kt`, `Money.kt` — nowe pola + konwersja grosze.
+- `data/db/AppDatabase.kt` — wersja bazy 1 → 2 (`fallbackToDestructiveMigration`, aplikacja wciąż przed wydaniem).
+- `data/ocr/ReceiptOcrReader.kt` — rozpoznawanie "Stan licznika"/"Kwota" obok litrów (wymaga słowa kluczowego, w odróżnieniu od litrów, żeby nie zgadywać).
+- `ui/capture/*`, `ui/history/*` — pola edytowalne na ekranie potwierdzenia i w historii.
+
+Zweryfikowane przez `./gradlew assembleDebug` (BUILD SUCCESSFUL); nie przetestowane na realnym paragonie/urządzeniu w tej sesji.

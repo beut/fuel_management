@@ -15,6 +15,8 @@ Reprezentuje pojedyncze zdarzenie zatankowania paliwa. Źródło: FR-001…FR-00
 | `liters` | Decimal(0,01) | Liczba zatankowanych litrów, dokładność do 0,01 l; MUST być > 0 |
 | `photoPath` | String, nullable | Ścieżka do pliku zdjęcia paragonu w pamięci wewnętrznej aplikacji; `null` dla wpisów dodanych bez zdjęcia (FR-004) lub po automatycznym usunięciu zdjęcia po 12 mies. (FR-015) |
 | `source` | Enum(`OCR`, `OCR_CORRECTED`, `MANUAL`) | Czy `liters` pochodzi z automatycznego rozpoznania OCR, ręcznej korekty wyniku OCR, czy pełnego ręcznego wpisu (FR-003, FR-004, FR-005) |
+| `odometerKm` | Long, nullable | Przebieg pojazdu w km w momencie tankowania; opcjonalny, wypełniany z OCR paragonu (pole "Stan licznika"), gdy uda się go jednoznacznie odczytać, z możliwością ręcznej korekty/uzupełnienia; nie wpływa na wyliczenie limitu miesięcznego |
+| `amountGrosze` | Long, nullable | Kwota zapłacona za tankowanie, w groszach; opcjonalna, wypełniana z OCR paragonu (pole "Kwota"), z możliwością ręcznej korekty/uzupełnienia; nie wpływa na wyliczenie limitu miesięcznego (to wyłącznie `liters`) |
 | `note` | String, nullable | Opcjonalna notatka użytkownika |
 | `createdAt` | Instant (epoch millis) | Znacznik czasu utworzenia wpisu w bazie; używany tylko technicznie (sortowanie wpisów z tą samą `date`), nie wpływa na przypisanie do miesiąca |
 

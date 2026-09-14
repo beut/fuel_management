@@ -114,10 +114,11 @@ Użytkownik przegląda historię wszystkich tankowań, podsumowanie zużycia pal
 - **FR-013**: System MUSI umożliwiać edycję oraz usunięcie wcześniej zapisanego wpisu tankowania.
 - **FR-014**: System MUSI przechowywać wszystkie dane tankowań i limitu wyłącznie lokalnie w bazie danych na urządzeniu użytkownika.
 - **FR-015**: System MUSI automatycznie usuwać zdjęcie paragonu powiązane z wpisem tankowania po upływie 12 miesięcy od daty tankowania, zachowując przy tym wszystkie pozostałe dane wpisu (datę, liczbę litrów, źródło wartości).
+- **FR-016**: System POWINIEN dodatkowo rozpoznawać (OCR) przebieg pojazdu i kwotę zapłaconą za tankowanie, jeśli paragon zawiera te dane w rozpoznawalnej formie, i zapisywać je jako opcjonalne pola wpisu, z możliwością ręcznej korekty lub uzupełnienia przez użytkownika; brak odczytu tych pól nie blokuje zapisania wpisu, a same pola nie wpływają na wyliczenie pozostałego limitu (wyłącznie liczba litrów).
 
 ### Key Entities *(include if feature involves data)*
 
-- **Wpis tankowania (Fueling Entry)**: Pojedyncze zdarzenie zatankowania paliwa — data i godzina, liczba zatankowanych litrów, opcjonalne zdjęcie paragonu (automatycznie usuwane po 12 miesiącach), źródło wartości litrów (OCR/ręczne), opcjonalna notatka.
+- **Wpis tankowania (Fueling Entry)**: Pojedyncze zdarzenie zatankowania paliwa — data i godzina, liczba zatankowanych litrów, opcjonalne zdjęcie paragonu (automatycznie usuwane po 12 miesiącach), źródło wartości litrów (OCR/ręczne), opcjonalny przebieg pojazdu, opcjonalna kwota tankowania, opcjonalna notatka.
 - **Limit miesięczny (Monthly Fuel Limit)**: Wartość limitu w litrach przypisana do służbowej karty paliwowej wraz z miesiącem kalendarzowym, od którego obowiązuje. Zmiana wartości limitu tworzy nową wartość obowiązującą od najbliższego kolejnego miesiąca, nie zmieniając limitu już trwającego miesiąca — system przechowuje historię wartości limitu w czasie.
 - **Podsumowanie miesiąca (Monthly Summary)**: Agregacja wpisów tankowań dla danego miesiąca — suma zatankowanych litrów, obowiązujący limit, pozostała/przekroczona ilość, wykorzystywana także do porównań między miesiącami.
 

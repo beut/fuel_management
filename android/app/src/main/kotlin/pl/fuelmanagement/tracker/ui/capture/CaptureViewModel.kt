@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import pl.fuelmanagement.tracker.data.db.FuelingEntryRepository
 import pl.fuelmanagement.tracker.data.db.entities.FuelEntrySource
 import pl.fuelmanagement.tracker.data.db.entities.FuelingEntryEntity
+import pl.fuelmanagement.tracker.data.db.entities.Money
 import pl.fuelmanagement.tracker.data.ocr.ReceiptOcrReader
 import pl.fuelmanagement.tracker.data.photo.PhotoStorage
 import pl.fuelmanagement.tracker.domain.duplicate.DuplicateEntryChecker
@@ -21,6 +22,8 @@ sealed interface CaptureStep {
     data class Confirming(
         val photoFile: File?,
         val suggestedLiters: Double?,
+        val suggestedOdometerKm: Long?,
+        val suggestedAmountPln: Double?,
         val ocrRawText: String,
         val duplicateWarningLiters: Double? = null,
     ) : CaptureStep
@@ -41,13 +44,25 @@ class CaptureViewModel(
         viewModelScope.launch {
             // FR-002: rozpoznawanie w pełni lokalne, bez wywołań sieciowych.
             val result = ocrReader.recognize(photoFile)
-            _step.value = CaptureStep.Confirming(photoFile, result.suggestedLiters, result.rawText)
+            _step.value = CaptureStep.Confirming(
+                photoFile,
+                result.suggestedLiters,
+                result.suggestedOdometerKm,
+                result.suggestedAmountPln,
+                result.rawText,
+            )
         }
     }
 
     /** FR-004: pozwala wpisać dane bezpośrednio, bez zdjęcia paragonu. */
     fun onManualEntryWithoutPhoto() {
-        _step.value = CaptureStep.Confirming(photoFile = null, suggestedLiters = null, ocrRawText = "")
+        _step.value = CaptureStep.Confirming(
+            photoFile = null,
+            suggestedLiters = null,
+            suggestedOdometerKm = null,
+            suggestedAmountPln = null,
+            ocrRawText = "",
+        )
     }
 
     fun onCancel() {
@@ -61,25 +76,33 @@ class CaptureViewModel(
     /**
      * FR-005a: pierwsza próba dla danej wartości sprawdza duplikat i, jeśli wykryty, pokazuje
      * ostrzeżenie zamiast zapisywać; ponowne wywołanie z tą samą wartością (użytkownik nacisnął
-     * "Zapisz" po raz drugi mimo ostrzeżenia) zapisuje wpis.
+     * "Zapisz" po raz drugi mimo ostrzeżenia) zapisuje wpis. [odometerKm]/[amountPln] są
+     * opcjonalne (użytkownik mógł je usunąć/nie potwierdzić) i nie wpływają na wykrywanie
+     * duplikatu -- to wyłącznie data + litry (data-model.md).
      */
-    fun onSubmit(liters: Double) {
+    fun onSubmit(liters: Double, odometerKm: Long?, amountPln: Double?) {
         val current = _step.value as? CaptureStep.Confirming ?: return
         viewModelScope.launch {
             val today = LocalDate.now()
             if (current.duplicateWarningLiters == liters) {
-                saveEntry(today, liters, current)
+                saveEntry(today, liters, odometerKm, amountPln, current)
                 return@launch
             }
             if (duplicateEntryChecker.isPossibleDuplicate(today, liters)) {
                 _step.value = current.copy(duplicateWarningLiters = liters)
             } else {
-                saveEntry(today, liters, current)
+                saveEntry(today, liters, odometerKm, amountPln, current)
             }
         }
     }
 
-    private suspend fun saveEntry(date: LocalDate, liters: Double, step: CaptureStep.Confirming) {
+    private suspend fun saveEntry(
+        date: LocalDate,
+        liters: Double,
+        odometerKm: Long?,
+        amountPln: Double?,
+        step: CaptureStep.Confirming,
+    ) {
         val source = when {
             step.photoFile == null || step.suggestedLiters == null -> FuelEntrySource.MANUAL
             liters == step.suggestedLiters -> FuelEntrySource.OCR
@@ -91,6 +114,8 @@ class CaptureViewModel(
                 centiliters = FuelingEntryEntity.litersToCentiliters(liters),
                 photoPath = step.photoFile?.absolutePath,
                 source = source,
+                odometerKm = odometerKm,
+                amountGrosze = amountPln?.let(Money::fromPln),
             ),
         )
         _step.value = CaptureStep.Finished

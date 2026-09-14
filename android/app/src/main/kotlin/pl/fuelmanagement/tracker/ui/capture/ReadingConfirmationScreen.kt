@@ -33,16 +33,22 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun ReadingConfirmationScreen(
     suggestedLiters: Double?,
+    suggestedOdometerKm: Long?,
+    suggestedAmountPln: Double?,
     hasPhoto: Boolean,
     ocrRawText: String,
     duplicateWarningLiters: Double?,
-    onSubmit: (liters: Double) -> Unit,
+    onSubmit: (liters: Double, odometerKm: Long?, amountPln: Double?) -> Unit,
     onCancel: () -> Unit,
 ) {
     var text by remember { mutableStateOf(suggestedLiters?.let { formatLiters(it) } ?: "") }
+    var odometerText by remember { mutableStateOf(suggestedOdometerKm?.toString() ?: "") }
+    var amountText by remember { mutableStateOf(suggestedAmountPln?.let { formatLiters(it) } ?: "") }
     var showRawOcrText by remember { mutableStateOf(false) }
 
     val parsedLiters = text.replace(',', '.').toDoubleOrNull()
+    val parsedOdometerKm = odometerText.toLongOrNull()
+    val parsedAmountPln = amountText.replace(',', '.').toDoubleOrNull()
     val canSubmit = parsedLiters != null && parsedLiters > 0.0
     val showDuplicateWarning = duplicateWarningLiters != null && duplicateWarningLiters == parsedLiters
 
@@ -58,6 +64,19 @@ fun ReadingConfirmationScreen(
             value = text,
             onValueChange = { text = it },
             label = { Text("Litry") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
+
+        OutlinedTextField(
+            value = odometerText,
+            onValueChange = { odometerText = it },
+            label = { Text("Przebieg (km, opcjonalnie)") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
+        OutlinedTextField(
+            value = amountText,
+            onValueChange = { amountText = it },
+            label = { Text("Kwota tankowania (PLN, opcjonalnie)") },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
 
@@ -88,7 +107,10 @@ fun ReadingConfirmationScreen(
 
         Row(modifier = Modifier.padding(top = 24.dp)) {
             TextButton(onClick = onCancel) { Text("Anuluj") }
-            Button(enabled = canSubmit, onClick = { parsedLiters?.let(onSubmit) }) { Text("Zapisz") }
+            Button(
+                enabled = canSubmit,
+                onClick = { parsedLiters?.let { onSubmit(it, parsedOdometerKm, parsedAmountPln) } },
+            ) { Text("Zapisz") }
         }
     }
 }

@@ -18,7 +18,7 @@ import pl.fuelmanagement.tracker.data.db.entities.MonthlyLimitEntity
  */
 @Database(
     entities = [FuelingEntryEntity::class, MonthlyLimitEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -34,11 +34,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
+                // fallbackToDestructiveMigration: aplikacja jest przed wydaniem (brak realnych
+                // użytkowników poza testami dewelopera), więc zamiast pisać Migration dla każdej
+                // zmiany schematu (tu: wersja 2 dodaje odometerKm/amountGrosze do FuelingEntry),
+                // baza jest po prostu zakładana od nowa przy zmianie wersji.
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME,
-                ).build().also { instance = it }
+                ).fallbackToDestructiveMigration().build().also { instance = it }
             }
     }
 }

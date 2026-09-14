@@ -50,8 +50,15 @@ fun HistoryScreen(onBack: () -> Unit) {
 
             LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
                 items(entries, key = { it.id }) { entry ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                         Text("${entry.date} — %.2f l (${entry.source})".format(entry.liters))
+                        val details = listOfNotNull(
+                            entry.odometerKm?.let { "przebieg: $it km" },
+                            entry.amountPln?.let { "kwota: %.2f zł".format(it) },
+                        )
+                        if (details.isNotEmpty()) {
+                            Text(details.joinToString(" · "))
+                        }
                     }
                     TextButton(onClick = { editingEntry = entry }) { Text("Edytuj / usuń") }
                     HorizontalDivider()
@@ -64,8 +71,8 @@ fun HistoryScreen(onBack: () -> Unit) {
         EditEntryDialog(
             entry = entry,
             onDismiss = { editingEntry = null },
-            onSave = { litersText ->
-                if (viewModel.updateLiters(entry, litersText)) editingEntry = null
+            onSave = { litersText, odometerText, amountText ->
+                if (viewModel.updateEntry(entry, litersText, odometerText, amountText)) editingEntry = null
             },
             onDelete = {
                 viewModel.delete(entry)
@@ -79,23 +86,41 @@ fun HistoryScreen(onBack: () -> Unit) {
 private fun EditEntryDialog(
     entry: FuelingEntryEntity,
     onDismiss: () -> Unit,
-    onSave: (litersText: String) -> Unit,
+    onSave: (litersText: String, odometerText: String, amountText: String) -> Unit,
     onDelete: () -> Unit,
 ) {
     var litersText by remember(entry.id) { mutableStateOf("%.2f".format(entry.liters)) }
+    var odometerText by remember(entry.id) { mutableStateOf(entry.odometerKm?.toString() ?: "") }
+    var amountText by remember(entry.id) { mutableStateOf(entry.amountPln?.let { "%.2f".format(it) } ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Wpis z dnia ${entry.date}") },
         text = {
-            OutlinedTextField(
-                value = litersText,
-                onValueChange = { litersText = it },
-                label = { Text("Litry") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column {
+                OutlinedTextField(
+                    value = litersText,
+                    onValueChange = { litersText = it },
+                    label = { Text("Litry") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = odometerText,
+                    onValueChange = { odometerText = it },
+                    label = { Text("Przebieg (km, opcjonalnie)") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Kwota (PLN, opcjonalnie)") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
         },
-        confirmButton = { TextButton(onClick = { onSave(litersText) }) { Text("Zapisz") } },
+        confirmButton = {
+            TextButton(onClick = { onSave(litersText, odometerText, amountText) }) { Text("Zapisz") }
+        },
         dismissButton = {
             Row {
                 TextButton(onClick = onDelete) { Text("Usuń") }

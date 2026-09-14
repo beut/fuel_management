@@ -53,6 +53,8 @@ fun CaptureScreen(onDone: () -> Unit) {
         )
         is CaptureStep.Confirming -> ReadingConfirmationScreen(
             suggestedLiters = currentStep.suggestedLiters,
+            suggestedOdometerKm = currentStep.suggestedOdometerKm,
+            suggestedAmountPln = currentStep.suggestedAmountPln,
             hasPhoto = currentStep.photoFile != null,
             ocrRawText = currentStep.ocrRawText,
             duplicateWarningLiters = currentStep.duplicateWarningLiters,

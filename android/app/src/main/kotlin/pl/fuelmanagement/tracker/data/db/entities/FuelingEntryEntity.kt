@@ -25,6 +25,11 @@ enum class FuelEntrySource {
  *
  * [photoPath] jest `null` dla wpisów dodanych bez zdjęcia (FR-004) lub po automatycznym usunięciu
  * zdjęcia po 12 miesiącach (FR-015).
+ *
+ * [odometerKm] (przebieg pojazdu w km) i [amountGrosze] (kwota zapłacona za tankowanie, w groszach)
+ * są opcjonalne -- wypełniane z OCR paragonu, gdy uda się je jednoznacznie odczytać ("Stan
+ * licznika" / "Kwota"), z możliwością ręcznej korekty lub pominięcia na ekranie potwierdzenia; nie
+ * wpływają na wyliczenie limitu miesięcznego (to wyłącznie [centiliters]).
  */
 @Entity(tableName = "fueling_entries")
 data class FuelingEntryEntity(
@@ -34,11 +39,14 @@ data class FuelingEntryEntity(
     val centiliters: Long,
     val photoPath: String?,
     val source: FuelEntrySource,
+    val odometerKm: Long? = null,
+    val amountGrosze: Long? = null,
     val note: String? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
 ) {
     val date: LocalDate get() = LocalDate.ofEpochDay(dateEpochDay)
     val liters: Double get() = centiliters / 100.0
+    val amountPln: Double? get() = amountGrosze?.let { it / 100.0 }
 
     companion object {
         fun litersToCentiliters(liters: Double): Long = Centiliters.fromLiters(liters)
